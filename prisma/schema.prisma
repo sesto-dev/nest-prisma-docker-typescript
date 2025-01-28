@@ -1,0 +1,286 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  // previewFeatures = []
+}
+
+model User {
+  id String @id @default(cuid())
+
+  email    String  @unique
+  password String?
+
+  phone  String? @unique
+  avatar String?
+
+  firstName     String?
+  lastName     String?
+  birthday DateTime?
+
+  OTP                   String?
+  emailUnsubscribeToken String? @unique @default(cuid())
+  referralCode          String  @unique @default(nanoid())
+
+  isBanned          Boolean @default(false)
+  isEmailVerified   Boolean @default(false)
+  isPhoneVerified   Boolean @default(false)
+  isEmailSubscribed Boolean @default(false)
+  isPhoneSubscribed Boolean @default(false)
+
+  // Roles
+  roles Role[] @default([USER])
+
+  // Profiles
+  artistProfile    ArtistProfile?
+  galleryProfile   GalleryProfile?
+  collectorProfile CollectorProfile?
+
+  // Relationships
+  payments      Payment[]
+  notifications Notification[]
+  errors        Error[]
+  files         File[]
+  sessions      Session[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Session Model
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+}
+
+// Role Enum
+enum Role {
+  ADMIN
+  ARTIST
+  GALLERY
+  COLLECTOR
+  USER
+}
+
+// Artist Profile Model
+model ArtistProfile {
+  id String @id @default(cuid())
+
+  bio     String?
+  website String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+
+  artworks Artwork[]
+
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Gallery Profile Model
+model GalleryProfile {
+  id String @id @default(cuid())
+
+  name     String
+  bio      String?
+  website  String?
+  location String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+
+  curatedArtworks Artwork[]
+
+  isVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Collector Profile Model
+model CollectorProfile {
+  id String @id @default(cuid())
+
+  bio     String?
+  website String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String @unique
+
+  purchasedArtworks Artwork[]
+
+  isVerified Boolean @default(false)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Bid       Bid[]
+  Payment   Payment[]
+}
+
+// Artwork Model
+model Artwork {
+  id String @id @default(cuid())
+
+  title       String
+  description String
+  tags        String[]
+  type        ArtworkType[]
+  location    String?
+  weight      Float?
+  height     Float?
+  width      Float?
+  depth      Float?
+
+  // Relationships
+  artist   ArtistProfile @relation(fields: [artistId], references: [id])
+  artistId String
+
+  gallery   GalleryProfile? @relation(fields: [galleryId], references: [id])
+  galleryId String?
+
+  collector   CollectorProfile? @relation(fields: [collectorId], references: [id])
+  collectorId String?
+
+  auction Auction?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  Payment   Payment[]
+}
+
+// Artwork Type Enum
+enum ArtworkType {
+  DIGITAL
+  PHYSICAL
+}
+
+// Auction Model
+model Auction {
+  id String @id @default(cuid())
+
+  artwork   Artwork @relation(fields: [artworkId], references: [id])
+  artworkId String  @unique
+
+  startDate   DateTime
+  endDate     DateTime
+  startingBid Float
+  currentBid  Float?
+
+  status AuctionStatus @default(UPCOMING)
+
+  bids Bid[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Auction Status Enum
+enum AuctionStatus {
+  UPCOMING
+  LIVE
+  ENDED
+  SOLD
+}
+
+// Bid Model
+model Bid {
+  id String @id @default(cuid())
+
+  amount      Float
+  bidder      CollectorProfile @relation(fields: [collectorId], references: [id])
+  collectorId String
+
+  auction   Auction @relation(fields: [auctionId], references: [id])
+  auctionId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Payment Model
+model Payment {
+  id           Int               @id @default(autoincrement())
+  status       PaymentStatusEnum
+  refId        String            @unique
+  isSuccessful Boolean           @default(false)
+
+  amount            Float
+  commissionAmount  Float // Platform commission
+  curatorCommission Float // Curator commission
+
+  artwork   Artwork @relation(fields: [artworkId], references: [id])
+  artworkId String
+
+  collector   CollectorProfile @relation(fields: [collectorId], references: [id])
+  collectorId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  User      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+}
+
+// Payment Status Enum
+enum PaymentStatusEnum {
+  PROCESSING
+  PAID
+  FAILED
+  DENIED
+}
+
+// Notification Model
+model Notification {
+  id String @id @default(cuid())
+
+  title   String
+  content String
+  isRead  Boolean @default(false)
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Error Model
+model Error {
+  id String @id @default(cuid())
+
+  error String
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// File Model
+model File {
+  id String @id @default(cuid())
+
+  bucket       String?
+  fileName     String?
+  originalName String?
+  size         Float?
+  url          String?
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
