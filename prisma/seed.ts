@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { faker } from '@faker-js/faker';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,7 @@ async function seedUsers() {
     const user = await prisma.user.create({
       data: {
         email: faker.internet.email(),
-        password: '1234',
+        password: await bcrypt.hash('password', 10),
         phone: faker.phone.number(),
         firstName: faker.person.firstName(),
         lastName: faker.person.lastName(),
@@ -91,8 +92,8 @@ async function seedArtworks(artists: any[], galleries: any[]) {
         height: faker.number.float({ min: 10, max: 100 }),
         width: faker.number.float({ min: 10, max: 100 }),
         depth: faker.number.float({ min: 1, max: 10 }),
-        artist: { connect: { id: artists[i % artists.length].id } },
-        gallery: { connect: { id: galleries[i % galleries.length].id } },
+        artists: { connect: { id: artists[i % artists.length].id } },
+        galleries: { connect: { id: galleries[i % galleries.length].id } },
       },
     });
     artworks.push(artwork);

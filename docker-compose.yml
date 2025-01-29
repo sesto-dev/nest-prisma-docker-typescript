@@ -17,8 +17,7 @@ services:
     container_name: postgresprisma
     restart: always
     ports:
-      - '127.0.0.1:5433:5432' # Map to localhost
-      # - 5432:5432
+      - ${POSTGRES_PORT}:5432
     env_file:
       - .env
     volumes:

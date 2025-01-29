@@ -101,6 +101,8 @@ model GalleryProfile {
 
   isVerified Boolean @default(false)
 
+  payments Payment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -140,20 +142,15 @@ model Artwork {
   depth      Float?
 
   // Relationships
-  artist   ArtistProfile @relation(fields: [artistId], references: [id])
-  artistId String
-
-  gallery   GalleryProfile? @relation(fields: [galleryId], references: [id])
-  galleryId String?
-
-  collector   CollectorProfile? @relation(fields: [collectorId], references: [id])
-  collectorId String?
-
-  auction Auction?
+  artists   ArtistProfile[]
+  galleries   GalleryProfile[]
+  collectors   CollectorProfile[]
+  auctions Auction[]
+  payments   Payment[]
+  shippings  Shipping[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  Payment   Payment[]
 }
 
 // Artwork Type Enum
@@ -165,19 +162,15 @@ enum ArtworkType {
 // Auction Model
 model Auction {
   id String @id @default(cuid())
-
   artwork   Artwork @relation(fields: [artworkId], references: [id])
   artworkId String  @unique
-
   startDate   DateTime
   endDate     DateTime
   startingBid Float
   currentBid  Float?
-
   status AuctionStatus @default(UPCOMING)
-
+  isPaymentCompleted Boolean @default(false) // Track if payment is completed
   bids Bid[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -188,6 +181,22 @@ enum AuctionStatus {
   LIVE
   ENDED
   SOLD
+}
+
+model Shipping {
+  id String @id @default(cuid())
+
+  address String
+  city    String
+  state   String
+  zip     String
+  country String
+
+  artwork   Artwork @relation(fields: [artworkId], references: [id])
+  artworkId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Bid Model
@@ -212,6 +221,9 @@ model Payment {
   refId        String            @unique
   isSuccessful Boolean           @default(false)
 
+  paymentIntentId   String? // Stripe Payment Intent ID
+  stripeCustomerId  String? // Stripe Customer ID
+
   amount            Float
   commissionAmount  Float // Platform commission
   curatorCommission Float // Curator commission
@@ -221,6 +233,9 @@ model Payment {
 
   collector   CollectorProfile @relation(fields: [collectorId], references: [id])
   collectorId String
+
+  gallery   GalleryProfile? @relation(fields: [galleryId], references: [id])
+  galleryId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

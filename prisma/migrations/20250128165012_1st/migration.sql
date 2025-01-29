@@ -97,9 +97,6 @@ CREATE TABLE "Artwork" (
     "height" DOUBLE PRECISION,
     "width" DOUBLE PRECISION,
     "depth" DOUBLE PRECISION,
-    "artistId" TEXT NOT NULL,
-    "galleryId" TEXT,
-    "collectorId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -115,10 +112,26 @@ CREATE TABLE "Auction" (
     "startingBid" DOUBLE PRECISION NOT NULL,
     "currentBid" DOUBLE PRECISION,
     "status" "AuctionStatus" NOT NULL DEFAULT 'UPCOMING',
+    "isPaymentCompleted" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Auction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Shipping" (
+    "id" TEXT NOT NULL,
+    "address" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "state" TEXT NOT NULL,
+    "zip" TEXT NOT NULL,
+    "country" TEXT NOT NULL,
+    "artworkId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Shipping_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -139,11 +152,14 @@ CREATE TABLE "Payment" (
     "status" "PaymentStatusEnum" NOT NULL,
     "refId" TEXT NOT NULL,
     "isSuccessful" BOOLEAN NOT NULL DEFAULT false,
+    "paymentIntentId" TEXT,
+    "stripeCustomerId" TEXT,
     "amount" DOUBLE PRECISION NOT NULL,
     "commissionAmount" DOUBLE PRECISION NOT NULL,
     "curatorCommission" DOUBLE PRECISION NOT NULL,
     "artworkId" TEXT NOT NULL,
     "collectorId" TEXT NOT NULL,
+    "galleryId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "userId" TEXT,
@@ -188,6 +204,30 @@ CREATE TABLE "File" (
     CONSTRAINT "File_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "_ArtistProfileToArtwork" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL,
+
+    CONSTRAINT "_ArtistProfileToArtwork_AB_pkey" PRIMARY KEY ("A","B")
+);
+
+-- CreateTable
+CREATE TABLE "_ArtworkToGalleryProfile" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL,
+
+    CONSTRAINT "_ArtworkToGalleryProfile_AB_pkey" PRIMARY KEY ("A","B")
+);
+
+-- CreateTable
+CREATE TABLE "_ArtworkToCollectorProfile" (
+    "A" TEXT NOT NULL,
+    "B" TEXT NOT NULL,
+
+    CONSTRAINT "_ArtworkToCollectorProfile_AB_pkey" PRIMARY KEY ("A","B")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -224,6 +264,15 @@ CREATE INDEX "Error_userId_idx" ON "Error"("userId");
 -- CreateIndex
 CREATE INDEX "File_userId_idx" ON "File"("userId");
 
+-- CreateIndex
+CREATE INDEX "_ArtistProfileToArtwork_B_index" ON "_ArtistProfileToArtwork"("B");
+
+-- CreateIndex
+CREATE INDEX "_ArtworkToGalleryProfile_B_index" ON "_ArtworkToGalleryProfile"("B");
+
+-- CreateIndex
+CREATE INDEX "_ArtworkToCollectorProfile_B_index" ON "_ArtworkToCollectorProfile"("B");
+
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -237,16 +286,10 @@ ALTER TABLE "GalleryProfile" ADD CONSTRAINT "GalleryProfile_userId_fkey" FOREIGN
 ALTER TABLE "CollectorProfile" ADD CONSTRAINT "CollectorProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Artwork" ADD CONSTRAINT "Artwork_artistId_fkey" FOREIGN KEY ("artistId") REFERENCES "ArtistProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Artwork" ADD CONSTRAINT "Artwork_galleryId_fkey" FOREIGN KEY ("galleryId") REFERENCES "GalleryProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Artwork" ADD CONSTRAINT "Artwork_collectorId_fkey" FOREIGN KEY ("collectorId") REFERENCES "CollectorProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "Auction" ADD CONSTRAINT "Auction_artworkId_fkey" FOREIGN KEY ("artworkId") REFERENCES "Artwork"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Shipping" ADD CONSTRAINT "Shipping_artworkId_fkey" FOREIGN KEY ("artworkId") REFERENCES "Artwork"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Bid" ADD CONSTRAINT "Bid_collectorId_fkey" FOREIGN KEY ("collectorId") REFERENCES "CollectorProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -261,6 +304,9 @@ ALTER TABLE "Payment" ADD CONSTRAINT "Payment_artworkId_fkey" FOREIGN KEY ("artw
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_collectorId_fkey" FOREIGN KEY ("collectorId") REFERENCES "CollectorProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Payment" ADD CONSTRAINT "Payment_galleryId_fkey" FOREIGN KEY ("galleryId") REFERENCES "GalleryProfile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -271,3 +317,21 @@ ALTER TABLE "Error" ADD CONSTRAINT "Error_userId_fkey" FOREIGN KEY ("userId") RE
 
 -- AddForeignKey
 ALTER TABLE "File" ADD CONSTRAINT "File_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtistProfileToArtwork" ADD CONSTRAINT "_ArtistProfileToArtwork_A_fkey" FOREIGN KEY ("A") REFERENCES "ArtistProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtistProfileToArtwork" ADD CONSTRAINT "_ArtistProfileToArtwork_B_fkey" FOREIGN KEY ("B") REFERENCES "Artwork"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtworkToGalleryProfile" ADD CONSTRAINT "_ArtworkToGalleryProfile_A_fkey" FOREIGN KEY ("A") REFERENCES "Artwork"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtworkToGalleryProfile" ADD CONSTRAINT "_ArtworkToGalleryProfile_B_fkey" FOREIGN KEY ("B") REFERENCES "GalleryProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtworkToCollectorProfile" ADD CONSTRAINT "_ArtworkToCollectorProfile_A_fkey" FOREIGN KEY ("A") REFERENCES "Artwork"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtworkToCollectorProfile" ADD CONSTRAINT "_ArtworkToCollectorProfile_B_fkey" FOREIGN KEY ("B") REFERENCES "CollectorProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
