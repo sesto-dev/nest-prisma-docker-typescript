@@ -5,25 +5,30 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
-  // previewFeatures = []
 }
 
 model User {
   id String @id @default(cuid())
 
-  email    String  @unique
-  password String?
+  email    String  @unique @map("email_index")
+  password String
 
   phone  String? @unique
   avatar String?
 
-  firstName     String?
-  lastName     String?
-  birthday DateTime?
+  firstName String?
+  lastName  String?
+  birthday  DateTime?
+  roles     UserRole[] @default([USER])
 
   OTP                   String?
   emailUnsubscribeToken String? @unique @default(cuid())
   referralCode          String  @unique @default(nanoid())
+
+  referredFrom   User?   @relation("ReferredUsers", fields: [referredFromId], references: [id])
+  referredFromId String?
+
+  referredUsers User[] @relation("ReferredUsers")
 
   isBanned          Boolean @default(false)
   isEmailVerified   Boolean @default(false)
@@ -31,35 +36,26 @@ model User {
   isEmailSubscribed Boolean @default(false)
   isPhoneSubscribed Boolean @default(false)
 
-  // Roles
-  roles Role[] @default([USER])
-
   // Profiles
-  artistProfile    ArtistProfile?
-  galleryProfile   GalleryProfile?
-  collectorProfile CollectorProfile?
+  artist    Artist?
+  gallery   Gallery?
+  collector Collector?
 
-  // Relationships
   payments      Payment[]
   notifications Notification[]
   errors        Error[]
   files         File[]
   sessions      Session[]
 
+  tickets         Ticket[]
+  ticketMessages  TicketMessage[]
+  assignedTickets Ticket[] @relation("AssignedTickets")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Session Model
-model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  expiresAt DateTime
-  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
-}
-
-// Role Enum
-enum Role {
+enum UserRole {
   ADMIN
   ARTIST
   GALLERY
@@ -67,10 +63,70 @@ enum Role {
   USER
 }
 
-// Artist Profile Model
-model ArtistProfile {
+model Purchase {
+  id          String  @id @default(cuid())
+  isDelivered Boolean @default(false)
+
+  galleryAgreement   GalleryArtistAgreement? @relation(fields: [galleryAgreementId], references: [id])
+  galleryAgreementId String?
+
+  artFairAgreement   ArtFairGalleryArtistAgreement? @relation(fields: [artFairAgreementId], references: [id])
+  artFairAgreementId String?
+
+  collector   Collector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+  collectorId String
+
+  payment Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id     String @id @default(cuid())
+  status PaymentStatusEnum
+  type   PaymentType
+
+  refId            String  @unique @map("ref_id_index")
+  paymentIntentId  String
+  stripeCustomerId String
+
+  amount Float
+
+  purchase   Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  purchaseId String?
+
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum PaymentType {
+  DEPOSIT
+  WITHDRAW
+  PURCHASE
+}
+
+enum PaymentStatusEnum {
+  PROCESSING
+  SUCCESS
+  FAILED
+  DENIED
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(references: [id], fields: [userId], onDelete: Cascade)
+}
+
+model Artist {
   id String @id @default(cuid())
 
+  name    String
   bio     String?
   website String?
 
@@ -79,15 +135,18 @@ model ArtistProfile {
 
   artworks Artwork[]
 
+  galleryArtistAgreements        GalleryArtistAgreement[]
+  artFairGalleryArtistAgreements ArtFairGalleryArtistAgreement[]
+
   isVerified Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Gallery Profile Model
-model GalleryProfile {
-  id String @id @default(cuid())
+model Gallery {
+  id         String  @id @default(cuid())
+  isVerified Boolean @default(false)
 
   name     String
   bio      String?
@@ -97,18 +156,32 @@ model GalleryProfile {
   user   User   @relation(fields: [userId], references: [id])
   userId String @unique
 
-  curatedArtworks Artwork[]
-
-  isVerified Boolean @default(false)
-
-  payments Payment[]
+  galleryArtistAgreements  GalleryArtistAgreement[]
+  artFairGalleryAgreements ArtFairGalleryAgreement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Collector Profile Model
-model CollectorProfile {
+model GalleryArtistAgreement {
+  id String @id @default(cuid())
+
+  gallery   Gallery @relation(fields: [galleryId], references: [id])
+  galleryId String
+  artist    Artist  @relation(fields: [artistId], references: [id])
+  artistId  String
+  artwork   Artwork @relation(fields: [artworkId], references: [id])
+  artworkId String
+
+  galleryCommission Float
+
+  purchases Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Collector {
   id String @id @default(cuid())
 
   bio     String?
@@ -117,17 +190,65 @@ model CollectorProfile {
   user   User   @relation(fields: [userId], references: [id])
   userId String @unique
 
-  purchasedArtworks Artwork[]
+  purchases Purchase[]
 
   isVerified Boolean @default(false)
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  Bid       Bid[]
-  Payment   Payment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-// Artwork Model
+model ArtFair {
+  id String @id @default(cuid())
+
+  name        String   @unique
+  description String
+  website     String?
+  location    String
+  startDate   DateTime
+  endDate     DateTime
+
+  artFairGalleryAgreements ArtFairGalleryAgreement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ArtFairGalleryAgreement {
+  id String @id @default(cuid())
+
+  artFair   ArtFair @relation(fields: [artFairId], references: [id])
+  artFairId String
+  gallery   Gallery @relation(fields: [galleryId], references: [id])
+  galleryId String
+
+  artFairCommission Float
+
+  artFairGalleryArtistAgreements ArtFairGalleryArtistAgreement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ArtFairGalleryArtistAgreement {
+  id String @id @default(cuid())
+
+  artFairGalleryAgreement   ArtFairGalleryAgreement @relation(fields: [artFairGalleryAgreementId], references: [id])
+  artFairGalleryAgreementId String
+
+  artwork   Artwork @relation(fields: [artworkId], references: [id])
+  artworkId String
+  artist    Artist  @relation(fields: [artistId], references: [id])
+  artistId  String
+
+  galleryCommission Float
+
+  purchases Purchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Artwork {
   id String @id @default(cuid())
 
@@ -137,50 +258,24 @@ model Artwork {
   type        ArtworkType[]
   location    String?
   weight      Float?
-  height     Float?
-  width      Float?
-  depth      Float?
+  height      Float?
+  width       Float?
+  depth       Float?
 
   // Relationships
-  artists   ArtistProfile[]
-  galleries   GalleryProfile[]
-  collectors   CollectorProfile[]
-  auctions Auction[]
-  payments   Payment[]
-  shippings  Shipping[]
+  artists   Artist[]
+  shippings Shipping[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-}
+  galleryArtistAgreements        GalleryArtistAgreement[]
+  artFairGalleryArtistAgreements ArtFairGalleryArtistAgreement[]
 
-// Artwork Type Enum
-enum ArtworkType {
-  DIGITAL
-  PHYSICAL
-}
-
-// Auction Model
-model Auction {
-  id String @id @default(cuid())
-  artwork   Artwork @relation(fields: [artworkId], references: [id])
-  artworkId String  @unique
-  startDate   DateTime
-  endDate     DateTime
-  startingBid Float
-  currentBid  Float?
-  status AuctionStatus @default(UPCOMING)
-  isPaymentCompleted Boolean @default(false) // Track if payment is completed
-  bids Bid[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-// Auction Status Enum
-enum AuctionStatus {
-  UPCOMING
-  LIVE
-  ENDED
-  SOLD
+enum ArtworkType {
+  DIGITAL
+  PHYSICAL
 }
 
 model Shipping {
@@ -199,59 +294,6 @@ model Shipping {
   updatedAt DateTime @updatedAt
 }
 
-// Bid Model
-model Bid {
-  id String @id @default(cuid())
-
-  amount      Float
-  bidder      CollectorProfile @relation(fields: [collectorId], references: [id])
-  collectorId String
-
-  auction   Auction @relation(fields: [auctionId], references: [id])
-  auctionId String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// Payment Model
-model Payment {
-  id           Int               @id @default(autoincrement())
-  status       PaymentStatusEnum
-  refId        String            @unique
-  isSuccessful Boolean           @default(false)
-
-  paymentIntentId   String? // Stripe Payment Intent ID
-  stripeCustomerId  String? // Stripe Customer ID
-
-  amount            Float
-  commissionAmount  Float // Platform commission
-  curatorCommission Float // Curator commission
-
-  artwork   Artwork @relation(fields: [artworkId], references: [id])
-  artworkId String
-
-  collector   CollectorProfile @relation(fields: [collectorId], references: [id])
-  collectorId String
-
-  gallery   GalleryProfile? @relation(fields: [galleryId], references: [id])
-  galleryId String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  User      User?    @relation(fields: [userId], references: [id])
-  userId    String?
-}
-
-// Payment Status Enum
-enum PaymentStatusEnum {
-  PROCESSING
-  PAID
-  FAILED
-  DENIED
-}
-
-// Notification Model
 model Notification {
   id String @id @default(cuid())
 
@@ -268,11 +310,58 @@ model Notification {
   @@index([userId])
 }
 
-// Error Model
+model Ticket {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+
+  status TicketStatus @default(OPEN)
+
+  messages TicketMessage[]
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  assignedTo   User?   @relation("AssignedTickets", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([assignedToId])
+}
+
+model TicketMessage {
+  id      String @id @default(cuid())
+  message String
+
+  ticket   Ticket @relation(fields: [ticketId], references: [id])
+  ticketId String
+
+  author   User   @relation(fields: [authorId], references: [id])
+  authorId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([authorId])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
 model Error {
   id String @id @default(cuid())
 
-  error String
+  error      String
+  errorCode  String?
+  stackTrace String?
 
   user   User?   @relation(fields: [userId], references: [id])
   userId String?
@@ -282,7 +371,6 @@ model Error {
   @@index([userId])
 }
 
-// File Model
 model File {
   id String @id @default(cuid())
 
@@ -291,6 +379,8 @@ model File {
   originalName String?
   size         Float?
   url          String?
+  mimeType     String?
+  fileType     FileType?
 
   user   User   @relation(fields: [userId], references: [id])
   userId String
@@ -298,4 +388,11 @@ model File {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+enum FileType {
+  IMAGE
+  PDF
+  DOCUMENT
+  OTHER
 }
